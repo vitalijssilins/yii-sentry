@@ -114,6 +114,7 @@ class SentryClient extends CApplicationComponent
             return null;
         }
         $this->processOptions($options);
+        $this->processLevel($exception, $options);
         try {
             $eventId = $this->_client->getIdent(
                 $this->_client->captureException($exception, $options, $logger, $context)
@@ -217,10 +218,62 @@ class SentryClient extends CApplicationComponent
      */
     protected function processOptions(&$options)
     {
+        if (isset(Yii::app()->session['user']) && isset(Yii::app()->session['company'])) {
+          $user = Yii::app()->session['user'];
+          $company = Yii::app()->session['company'];
+          
+          $options = CMap::mergeArray(
+            array(
+              'user' => array(
+                'id' => $user->id,
+                'username' => $user->username,
+                'name' => $user->first_name . ' ' . $user->last_name,
+                'email' => $user->email,
+                'company_id' => $company->id,
+                'company_name' => $company->companyName,
+                'phone' => $user->phone,
+                'two_factor_auth' => $user->two_factor_auth,
+                'email_confirm' => $user->email_confirm,
+                'phone_confirm' => $user->phone_confirm,
+                'country' => $user->country,
+                'reg_date' => $user->reg_date,
+                'last_auth' => $user->date_last_auth,
+                'ip_address' => Yii::app()->session['remote_addr']
+              )
+            ),
+            $options
+          );
+        }
+        
+        $options['release'] = exec('git log --pretty="%H" -n1 HEAD');
+      
         if (!isset($options['extra'])) {
             $options['extra'] = array();
         }
         $options['extra'] = CMap::mergeArray($this->extraVariables, $options['extra']);
+    }
+  
+    /**
+     * Add level based on exception data
+     * @param $exception
+     * @param $options
+     */
+    private function processLevel($exception, &$options) {
+      $statusCode = isset($exception->statusCode) ? $exception->statusCode : null;
+      
+      switch($statusCode) {
+        case 404:
+          $level = Raven_Client::WARN;
+          break;
+        case 500:
+          $level = Raven_Client::FATAL;
+          break;
+        default:
+          $level = Raven_Client::ERROR;
+      }
+      
+
+      $options['level'] = $level;
     }
 
     /**
@@ -230,7 +283,7 @@ class SentryClient extends CApplicationComponent
      */
     protected function log($message, $level)
     {
-        Yii::log($message, $level, 'crisu83.sentry.components.SentryClient');
+        Yii::log($message, $level, 'vitalijssilins.sentry.components.SentryClient');
     }
 
     /**
