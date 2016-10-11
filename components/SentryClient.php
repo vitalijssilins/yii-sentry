@@ -218,9 +218,8 @@ class SentryClient extends CApplicationComponent
      */
     protected function processOptions(&$options)
     {
-        if (isset(Yii::app()->session['user']) && isset(Yii::app()->session['company'])) {
+        if (isset(Yii::app()->session['user'])) {
           $user = Yii::app()->session['user'];
-          $company = Yii::app()->session['company'];
           
           $options = CMap::mergeArray(
             array(
@@ -229,8 +228,6 @@ class SentryClient extends CApplicationComponent
                 'username' => $user->username,
                 'name' => $user->first_name . ' ' . $user->last_name,
                 'email' => $user->email,
-                'company_id' => $company->id,
-                'company_name' => $company->companyName,
                 'phone' => $user->phone,
                 'two_factor_auth' => $user->two_factor_auth,
                 'email_confirm' => $user->email_confirm,
@@ -239,6 +236,20 @@ class SentryClient extends CApplicationComponent
                 'reg_date' => $user->reg_date,
                 'last_auth' => $user->date_last_auth,
                 'ip_address' => Yii::app()->session['remote_addr']
+              )
+            ),
+            $options
+          );
+        }
+  
+        if (isset(Yii::app()->session['company'])) {
+          $company = Yii::app()->session['company'];
+      
+          $options = CMap::mergeArray(
+            array(
+              'user' => array(
+                'company_id' => $company->id,
+                'company_name' => $company->companyName,
               )
             ),
             $options
