@@ -24,7 +24,7 @@
 class SentryClient extends CApplicationComponent
 {
     // Sentry constants.
-    const MAX_MESSAGE_LENGTH = 2048;
+    const MAX_MESSAGE_LENGTH = 999999999;
     const MAX_TAG_KEY_LENGTH = 32;
     const MAX_TAG_VALUE_LENGTH = 200;
     const MAX_CULPRIT_LENGTH = 200;
@@ -96,6 +96,39 @@ class SentryClient extends CApplicationComponent
         parent::init();
         $this->_client = $this->createClient();
     }
+  
+  /**
+   * Records a breadcrumb to Sentry
+   *
+   * @param        $message string describing the event. The most common vector, often used as a drop-in for a traditional log message.
+   * @param array  $data mapping (str => str) of metadata around the event. This is often used instead of message, but may also be used in addition.
+   * @param string $category category to label the event under. This generally is similar to a logger name, and will let you more easily understand the area an event took place, such as auth.
+   * @param string $level the level may be any of error, warn, info, or debug.
+   *
+   * @return bool
+   * @throws CException
+   */
+    public function recordBreadcrumb($message, $data = [], $category = '', $level = Raven_Client::INFO) {
+      try {
+        $this->_client->breadcrumbs->record(
+          [
+            'message'  => $message,
+            'data'     => $data,
+            'category' => $category,
+            'level'    => $level,
+          ]
+        );
+      } catch (Exception $e) {
+        if (YII_DEBUG) {
+          throw new CException('SentryClient failed to log breadcrumb: ' . $e->getMessage(), (int)$e->getCode());
+        } else {
+          $this->log($e->getMessage(), CLogger::LEVEL_ERROR);
+          throw new CException('SentryClient failed to log breadcrumb.', (int)$e->getCode());
+        }
+      }
+      
+      return true;
+    }
 
     /**
      * Logs an exception to Sentry.
@@ -156,6 +189,7 @@ class SentryClient extends CApplicationComponent
             return null;
         }
         $this->processOptions($options);
+        $this->processLevel($message, $options);
         try {
             $eventId = $this->_client->getIdent(
                 $this->_client->captureMessage($message, $params, $options, $stack, $context)
@@ -270,19 +304,27 @@ class SentryClient extends CApplicationComponent
      * @param $options
      */
     private function processLevel($exception, &$options) {
-      $statusCode = isset($exception->statusCode) ? $exception->statusCode : null;
-      
-      switch($statusCode) {
-        case 404:
-          $level = Raven_Client::WARN;
-          break;
-        case 500:
-          $level = Raven_Client::FATAL;
-          break;
-        default:
-          $level = Raven_Client::ERROR;
+      $statusCode = null;
+      if (isset($exception->statusCode)) {
+        $statusCode = $exception->statusCode;
+      } elseif(isset($option['extra']['category']))  {
+        $statusCode = end(explode('.', $options['extra']['category']));
       }
       
+      if (!is_numeric($statusCode) && isset($options['extra']['level'])) {
+        $level = $options['extra']['level'];
+      } else {
+        switch ($statusCode) {
+          case 404:
+            $level = Raven_Client::WARN;
+            break;
+          case 500:
+            $level = Raven_Client::FATAL;
+            break;
+          default:
+            $level = Raven_Client::ERROR;
+        }
+      }
 
       $options['level'] = $level;
     }
@@ -306,6 +348,7 @@ class SentryClient extends CApplicationComponent
     {
         $options = CMap::mergeArray(
             array(
+                'message_limit' => self::MAX_MESSAGE_LENGTH,
                 'logger' => 'yii',
                 'tags' => array(
                     'environment' => $this->environment,
