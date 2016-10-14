@@ -290,7 +290,9 @@ class SentryClient extends CApplicationComponent
           );
         }
         
-        $options['release'] = exec('git log --pretty="%H" -n1 HEAD');
+        /*
+         * Exec often is not allowed
+         * $options['release'] = exec('git log --pretty="%H" -n1 HEAD');*/
       
         if (!isset($options['extra'])) {
             $options['extra'] = array();
